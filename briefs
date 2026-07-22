@@ -1,0 +1,235 @@
+1.
+Brief · Personal RAG over your browsing
+Second Brain
+Build a private index of the pages you actually read — then prove it can answer real questions by testing it against your own two weeks of browsing.
+
+Chrome Extension · MV3
+$0 — fully local
+Privacy by default
+Repo + eval + demo
+Read this first
+How this assignment works
+Use any AI tool for the entire build — capture pipeline, chunking, embeddings, retrieval, generation, UI. Wiring up a RAG stack is not the focus.
+
+What we grade
+What we actually grade: an evaluation built from your own real browsing, and the messy problems that only show up on the world's least clean corpus — a human's actual reading. No dataset knows what you'll read this fortnight, whether your parser strips a specific site's chrome, or which near-duplicate visits collapse. In the live follow-up you ask your index a fresh question and we watch it retrieve. An eval you didn't genuinely verify is the one instant-fail.
+
+The build
+What you build
+A Manifest V3 Chrome extension plus a local RAG pipeline that quietly indexes the pages you read and answers questions with citations back into your history — "you read this on example.com, three days ago."
+
+Capture. Grab the readable content of pages you visit, under an allow/block model you control.
+Clean. Strip nav, ads, and boilerplate down to the real content — parsing fidelity matters.
+Dedup. Collapse re-visits, near-identical pages, and repeated SPA states.
+Index. Chunk → embed (local) → store in a local vector store / IndexedDB.
+Ask. Answer natural-language questions with citations; clicking one reopens the exact source.
+Control. Pause capture, exclude sites, delete an entry, wipe the whole index — all one click away.
+Everything runs locally by default. If you never read about something, the right answer is "not in your history," not a confident guess.
+
+Fieldwork
+Test it against your real fortnight
+Live corpus. Run capture over your genuine day-to-day browsing for an extended period — aim for around two weeks of real use. You cannot fabricate what you'll actually read.
+Hand-build a 30-question eval with verified answers drawn from that corpus. Include multi-hop (combine two+ pages), negative cases (things you never read → "not found"), and time-scoped ("what did I read about X last week"). Record ground truth + source location for each.
+Measure retrieval and answer quality across the eval. Score each: correct / partial / wrong / hallucinated.
+Wrestle the real problems and report them: boilerplate-stripping fidelity, near-duplicate dedup, half-loaded SPA capture, and your privacy/threat model. Improve one component and show the measured lift.
+Evidence
+Deliverables
+The extension + local-RAG repo + README (install, one-command eval run, the privacy model)
+eval/questions.json — 30 questions with ground truths and source locations (redact anything private)
+eval/logs/ — per-question retrieved chunks + answer + score, for each configuration
+FINDINGS.md — results table · error analysis (5 most interesting failures, with the retrieved chunks) · the one improvement's before/after · one surprise · a privacy/threat-model section · an AI-usage note
+A short demo: ask it 3 live questions, including one negative case
+Scoring
+How we read your submission
+Dimension	What we look for	Weight
+Personal eval rigor	Genuinely verified from real browsing; multi-hop + negatives present	
+30
+Measurement & error analysis	Failures traced to root cause with the retrieved chunks as evidence	
+25
+Handling the messy real problems	Boilerplate / dedup / SPA capture addressed, not hand-waved	
+20
+System quality & privacy design	Sensible pipeline, honest citations, local-only, real controls	
+15
+Communication	FINDINGS.md is clear and honest about limits	
+10
+We don't grade UI polish or raw accuracy. A well-analyzed 60% beats an unexamined 85% — and a negative case answered "not in your history" counts as a win.
+
+Live follow-up
+Where fabrication falls apart
+You ask your index a fresh question live; you predict whether it'll get it right and why, then we run it
+You walk us through your worst failure and defend the root-cause diagnosis
+We hand you one new question and predict-then-test it together
+Stack · $0
+No paid API, no host, no account
+Embeddings
+Transformers.js in-browser or Ollama nomic-embed — local, free.
+LLM
+Local Ollama (fully offline) or Gemini / Groq free tier.
+Store
+IndexedDB / a local vector store. Nothing leaves the machine by default.
+Ground rules
+Constraints & privacy
+Index only your own browsing, and stay in control of what's captured — exclude sensitive categories (banking, email, health, private accounts) by default. Because the corpus is personal, submit the system, your metrics, and a redacted eval — not your actual private pages. Use real usage; disclose if you seeded any. Make reasonable assumptions and note them; genuinely blocked, email us.
+
+Instant-fail
+An eval set that isn't genuinely verified against pages you really read — fabricated ground truth of any kind.
+
+----------------------------------------------------------------------------------------------------------
+
+2.
+Brief · Fake-review & rating-mismatch detector
+The Review Authenticity Lab
+Build a detector for suspicious reviews — then earn your numbers by hand-labeling real ones and watching real products change over time.
+
+Chrome Extension · MV3
+$0 — runs on-device
+Solo build
+Repo + corpus + time series + demo
+Read this first
+How this assignment works
+Use any AI tool for the entire build. Writing the extension is not the focus — we do this daily and expect you to.
+
+What we grade
+What we actually grade: the reviews you label by hand, and the changes you observe by waiting. Whether a specific real review is genuine, and whether a product gets a burst of fake ones next week, is live signal that exists in no dataset. In the live follow-up we ask why you labeled a given review the way you did. Fabricated findings — an invented burst most of all — are the one instant-fail.
+
+The build
+What you build
+A Manifest V3 Chrome extension that, on any product / app / listing page, collects the visible reviews and surfaces authenticity signals:
+
+Rating–text mismatch. Five stars with negative wording, or the reverse — caught with on-device sentiment.
+Templated & duplicated phrasing. Near-identical sentences recurring across reviewers.
+Temporal bursts. Clusters of reviews arriving in a suspiciously short window.
+Reviewer patterns. Where visible: brand-new accounts, single-review profiles, verified-purchase status.
+A "read this skeptically" summary. An overall read, with the specific reviews it's based on cited.
+Run sentiment on-device with Transformers.js — no server, no key. Handle pagination and lazy-loaded reviews. Be explicit about what you can't see: most sites hide reviewer history, and your tool should say so rather than pretend.
+
+Fieldwork
+Label real reviews, then watch real products
+Hand-labeled corpus. Across ~10 real products, label a set of reviews as genuine / suspicious / can't-tell, with your reasoning. You are the ground truth — be ready to defend any single label.
+Measure each signal for precision and recall against your labels, and report where signals disagree.
+Longitudinal watch. Monitor 5 products' review streams over an extended window and capture the time series. Report any real injection burst, velocity change, or rating drift you actually observed — data you can only get by waiting.
+Signal-to-noise. How often did a flag correspond to something real? Build the taxonomy of noise you learned to suppress.
+Evidence
+Deliverables
+The extension repo + README (load-unpacked, permissions rationale, what's implemented, what it can't see)
+corpus/ — hand-labeled reviews with your reasons
+timeseries/ — captured review data for the 5 watched products
+FINDINGS.md — per-signal precision/recall · the longitudinal finding · signal-to-noise ratio · one surprise · an AI-usage note
+A short demo: analyze a live page, then show a captured burst (or the honest baseline if none spiked)
+Scoring
+How we read your submission
+Dimension	What we look for	Weight
+Corpus & labeling rigor	Real, varied reviews; defensible labels; can't-tell used honestly	
+30
+The longitudinal finding	Real observed change over time, honestly analyzed	
+25
+Measurement & signal-to-noise	Per-signal metrics; noise taxonomy grounded in the data	
+20
+Extension quality & honest scope	Handles pagination; states what it can't see; on-device	
+15
+Communication	FINDINGS.md is clear and honest about limits	
+10
+"Nothing spiked — here's the baseline" is a perfectly good result. We grade how you investigate, not whether you caught drama.
+
+Live follow-up
+Where fabrication falls apart
+We paste a fresh product page; you predict which reviews it flags, then we run it and compare
+You defend a single label from your corpus — why genuine, why suspicious
+You walk us through your captured burst (or baseline) and its analysis
+Stack · $0
+No paid API, no host, no account
+Sentiment
+Transformers.js in the extension — on-device, no key, no server.
+Time series
+chrome.storage / IndexedDB — local capture.
+Optional LLM
+Groq / Gemini free tier or local Ollama for the summary — still $0.
+Ground rules
+Constraints
+Public pages only; store only public review text. Don't reuse a product you've analyzed before; disclose prior familiarity. Make reasonable assumptions and note them. Genuinely blocked? Email us — good questions are a positive signal.
+
+Instant-fail
+Fabricated findings — an invented burst, or numbers your captured data doesn't support.
+
+Web-Integrity Series
+Label → Watch → Measure → Defend
+
+----------------------------------------------------------------------------------------------------------
+3.
+Brief · ToS / privacy-policy risk flagger
+The Fine-Print Redline
+Build a tool that flags the risky clauses in a site's terms — then prove it's right by reading the fine print yourself.
+
+Chrome Extension · MV3
+$0 — local model path
+Solo build
+Repo + clause corpus + demo
+Read this first
+How this assignment works
+Use any AI tool for the entire build. Wiring up extraction, summarization, and flagging is not the focus.
+
+What we grade
+What we actually grade: reading the policies yourself and deciding what's actually predatory. An LLM can draft candidate labels — but the ground truth of "does this clause exist, and is it genuinely risky or standard boilerplate?" is a judgment you make by reading the document. In the live follow-up we point your tool at a policy you didn't pick and check every flag against the real text. A confident flag for a clause that isn't there is the worst outcome in this brief.
+
+The build
+What you build
+A Manifest V3 Chrome extension that, on any site, locates and extracts the Terms of Service / Privacy Policy, summarizes it in plain language, and flags risky clauses — each flag quoting the exact passage it's based on. Cover these risk categories at minimum:
+
+Data sale / third-party sharing. Your data sold or handed to partners and brokers.
+Forced arbitration / class-action waiver. You give up the right to sue or join a class action.
+Auto-renewal / negative-option billing. Charges continue unless you actively cancel.
+Broad content license. They can reuse, sublicense, or train on what you upload.
+Unilateral change. "We may amend these terms at any time," often without notice.
+Vague or long data retention. Your data kept indefinitely, or for undefined periods.
+The real engineering problems: locating the policy, parsing very long documents, and — above all — not inventing clauses that aren't there. A grounded flag with a citation beats a confident summary every time.
+
+Fieldwork
+Read the policies, then hold your tool to what they say
+Labeled clause corpus from ~15 real policies. Extract clauses, classify each risky / standard by category, and record the exact source location. You verify every label by reading the policy. An LLM may draft; the ground truth is yours.
+Measure precision and recall against your labels, per category.
+Hallucination audit. Measure how often your tool flags a clause that isn't in the document, or mis-quotes one. Report this number prominently — grounding honesty is the whole game.
+The judgment call. "Predatory vs. standard boilerplate" is real — arbitration clauses are near-universal; is that a flag or just reality? Pick your five hardest and argue each.
+Iterate on grounding/retrieval, then re-measure — especially the hallucination rate.
+Evidence
+Deliverables
+The extension repo + README (load-unpacked, permissions rationale, what's implemented, known limits)
+corpus/ — labeled clauses: text + category + risk label + source location
+FINDINGS.md — precision/recall · hallucination rate · your five hardest calls · before/after iteration · one surprise · an AI-usage note
+A short demo: run it on a live policy and show a grounded flag with its citation
+Scoring
+How we read your submission
+Dimension	What we look for	Weight
+Clause corpus & labeling rigor	Real policies; clauses verified by reading; sources recorded	
+30
+Grounding & hallucination honesty	Flags cite real passages; hallucination rate measured and low	
+25
+Classification judgment	Predatory vs. boilerplate argued with the text	
+20
+Retrieval & extension quality	Finds and parses long policies reliably; permission-scoped	
+15
+Communication	FINDINGS.md is clear and honest about limits	
+10
+A tool that flags 6 real clauses and admits it missed 2 beats one that "finds everything" and invents one. Grounding is the point.
+
+Live follow-up
+Where fabrication falls apart
+We point it at a policy you didn't pick and check each flag against the actual text
+You defend one "boilerplate vs. predatory" call
+We name a passage and ask what your tool will say before we run it — then we run it
+Stack · $0
+No paid API, no host, no account
+Source text
+Policies are public page text — nothing gated.
+Model
+Groq / Gemini free tier, or fully local Ollama — the privacy-safe path for long documents.
+Retrieval
+Chunk with Transformers.js embeddings in-browser if needed; chrome.storage for state.
+Ground rules
+Constraints
+Public policies only. Don't reuse a policy you've studied before; disclose prior familiarity. Make reasonable assumptions where the document is ambiguous and note them. Genuinely blocked? Email us — good questions are a positive signal.
+
+Instant-fail
+Fabricated findings — and specifically, a flag that cites a clause the document does not contain.
+
+Web-Integrity Series
+Extract → Read → Ground → Defend
