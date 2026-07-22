@@ -1,0 +1,302 @@
+[
+  {
+    "id": 1,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 2,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 3,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 4,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 5,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 6,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 7,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 8,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 9,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 10,
+    "question": "",
+    "topology": "direct",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Direct fact from a single page you read"
+  },
+  {
+    "id": 11,
+    "question": "",
+    "topology": "multi_hop",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Requires combining info from 2+ different pages"
+  },
+  {
+    "id": 12,
+    "question": "",
+    "topology": "multi_hop",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Requires combining info from 2+ different pages"
+  },
+  {
+    "id": 13,
+    "question": "",
+    "topology": "multi_hop",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Requires combining info from 2+ different pages"
+  },
+  {
+    "id": 14,
+    "question": "",
+    "topology": "multi_hop",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Requires combining info from 2+ different pages"
+  },
+  {
+    "id": 15,
+    "question": "",
+    "topology": "multi_hop",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Requires combining info from 2+ different pages"
+  },
+  {
+    "id": 16,
+    "question": "",
+    "topology": "multi_hop",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Requires combining info from 2+ different pages"
+  },
+  {
+    "id": 17,
+    "question": "",
+    "topology": "multi_hop",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Requires combining info from 2+ different pages"
+  },
+  {
+    "id": 18,
+    "question": "",
+    "topology": "multi_hop",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Requires combining info from 2+ different pages"
+  },
+  {
+    "id": 19,
+    "question": "",
+    "topology": "time_scoped",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Include time markers like 'last week', 'yesterday', 'today'"
+  },
+  {
+    "id": 20,
+    "question": "",
+    "topology": "time_scoped",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Include time markers like 'last week', 'yesterday', 'today'"
+  },
+  {
+    "id": 21,
+    "question": "",
+    "topology": "time_scoped",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Include time markers like 'last week', 'yesterday', 'today'"
+  },
+  {
+    "id": 22,
+    "question": "",
+    "topology": "time_scoped",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Include time markers like 'last week', 'yesterday', 'today'"
+  },
+  {
+    "id": 23,
+    "question": "",
+    "topology": "time_scoped",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Include time markers like 'last week', 'yesterday', 'today'"
+  },
+  {
+    "id": 24,
+    "question": "",
+    "topology": "time_scoped",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Include time markers like 'last week', 'yesterday', 'today'"
+  },
+  {
+    "id": 25,
+    "question": "",
+    "topology": "time_scoped",
+    "ground_truth_answer": "",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "correct",
+    "notes": "REPLACE: Include time markers like 'last week', 'yesterday', 'today'"
+  },
+  {
+    "id": 26,
+    "question": "",
+    "topology": "negative",
+    "ground_truth_answer": "Not in your history.",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "not_in_history",
+    "notes": "REPLACE: Ask about a topic you DEFINITELY never read about"
+  },
+  {
+    "id": 27,
+    "question": "",
+    "topology": "negative",
+    "ground_truth_answer": "Not in your history.",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "not_in_history",
+    "notes": "REPLACE: Ask about a topic you DEFINITELY never read about"
+  },
+  {
+    "id": 28,
+    "question": "",
+    "topology": "negative",
+    "ground_truth_answer": "Not in your history.",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "not_in_history",
+    "notes": "REPLACE: Ask about a topic you DEFINITELY never read about"
+  },
+  {
+    "id": 29,
+    "question": "",
+    "topology": "negative",
+    "ground_truth_answer": "Not in your history.",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "not_in_history",
+    "notes": "REPLACE: Ask about a topic you DEFINITELY never read about"
+  },
+  {
+    "id": 30,
+    "question": "",
+    "topology": "negative",
+    "ground_truth_answer": "Not in your history.",
+    "source_urls": [],
+    "source_quotes": [],
+    "expected_behavior": "not_in_history",
+    "notes": "REPLACE: Ask about a topic you DEFINITELY never read about"
+  }
+]
