@@ -74,7 +74,7 @@ export async function embedText(text: string): Promise<Float32Array> {
   });
 
   // Extract the embedding from the nested tensor structure
-  return new Float32Array(output.data);
+  return new Float32Array(output.data as Float32Array);
 }
 
 /**
@@ -92,7 +92,7 @@ export async function embedBatch(texts: string[]): Promise<Float32Array[]> {
       pooling: "mean",
       normalize: true,
     });
-    results.push(new Float32Array(output.data));
+    results.push(new Float32Array(output.data as Float32Array));
   }
 
   return results;

@@ -11,12 +11,15 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "chrome"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
     }
   },
   "include": [
+    "env.d.ts",
+    ".wxt/types/**/*.d.ts",
     "entrypoints/**/*.ts",
     "entrypoints/**/*.tsx",
     "lib/**/*.ts",

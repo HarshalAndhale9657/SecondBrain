@@ -227,6 +227,21 @@ export function SettingsPanel(): React.JSX.Element {
         </button>
       </div>
 
+      {/* Eval Tools */}
+      <div className="settings-section">
+        <div className="settings-section-title">Evaluation Tools</div>
+        <div className="settings-description" style={{ marginBottom: 8 }}>
+          Run your eval/questions.json against your live browsing history.
+        </div>
+        <button
+          className="btn-secondary"
+          style={{ width: "100%" }}
+          onClick={() => chrome.tabs.create({ url: chrome.runtime.getURL("eval-runner.html") })}
+        >
+          Open Eval Runner
+        </button>
+      </div>
+
       {/* Danger Zone */}
       <div className="settings-section">
         <div className="settings-section-title">Danger Zone</div>

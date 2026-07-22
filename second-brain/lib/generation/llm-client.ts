@@ -51,18 +51,32 @@ const DEFAULT_CONFIGS: Record<LLMProvider, Partial<LLMConfig>> = {
 };
 
 /**
+ * Build-time API key injected from .env via Vite.
+ * Falls back to empty string if not set.
+ */
+const BUILD_TIME_GROQ_KEY: string = import.meta.env.VITE_GROQ_API_KEY || "";
+
+/**
  * Load LLM configuration from chrome.storage.local.
+ * Falls back to the build-time Groq API key if no key is stored.
  */
 export async function loadLLMConfig(): Promise<LLMConfig> {
   const result = await chrome.storage.local.get(STORAGE_KEY);
-  return (
-    result[STORAGE_KEY] || {
-      provider: "groq",
-      apiKey: "",
-      model: "llama-3.1-8b-instant",
-      baseUrl: "https://api.groq.com/openai/v1",
-    }
-  );
+  const stored = result[STORAGE_KEY];
+
+  if (stored && stored.apiKey) {
+    return stored;
+  }
+
+  // Return defaults with build-time key
+  const defaultConfig: LLMConfig = {
+    provider: "groq",
+    apiKey: stored?.apiKey || BUILD_TIME_GROQ_KEY,
+    model: stored?.model || "llama-3.1-8b-instant",
+    baseUrl: stored?.baseUrl || "https://api.groq.com/openai/v1",
+  };
+
+  return defaultConfig;
 }
 
 /**

@@ -130,7 +130,7 @@ export default defineBackground(() => {
 
     // Compare against existing documents
     const existingHashes = await getAllSimHashes();
-    let dedupAction = DedupAction.DISTINCT;
+    let dedupAction: string = DedupAction.DISTINCT;
     let matchedDocId: number | null = null;
 
     for (const existing of existingHashes) {
@@ -144,7 +144,7 @@ export default defineBackground(() => {
         break;
       }
 
-      if (action === DedupAction.NEAR_DUPLICATE && dedupAction !== DedupAction.IDENTICAL) {
+      if (action === DedupAction.NEAR_DUPLICATE && dedupAction === DedupAction.DISTINCT) {
         dedupAction = DedupAction.NEAR_DUPLICATE;
         matchedDocId = existing.doc_id;
       }
@@ -402,6 +402,27 @@ export default defineBackground(() => {
            .catch((err) => sendResponse({ success: false, error: err.message }));
           return true;
 
+        case "RUN_EVAL_QUERY": {
+          const reqId = crypto.randomUUID();
+          
+          // Helper to intercept the response from handleQuery without broadcasting
+          // We temporarily listen to messages from our own extension
+          return new Promise((resolve) => {
+             const listener = (msg: any) => {
+                if (msg.type === "QUERY_RESPONSE" && msg.payload.requestId === reqId) {
+                   chrome.runtime.onMessage.removeListener(listener);
+                   resolve(msg.payload);
+                }
+             };
+             chrome.runtime.onMessage.addListener(listener);
+             
+             handleQuery(message.payload.query, reqId).catch(err => {
+                 chrome.runtime.onMessage.removeListener(listener);
+                 resolve({ error: err.message });
+             });
+          }).then(sendResponse);
+        }
+
         case "QUERY":
           handleQuery(message.payload.query, message.payload.requestId);
           return false; // Response sent via separate message
@@ -463,16 +484,22 @@ export default defineBackground(() => {
             .catch((err) => sendResponse({ error: err.message }));
           return true;
 
-        case "SAVE_LLM_CONFIG":
+        case "SAVE_LLM_CONFIG": {
+          const baseUrls: Record<string, string> = {
+            groq: "https://api.groq.com/openai/v1",
+            gemini: "https://generativelanguage.googleapis.com/v1beta",
+            ollama: "http://localhost:11434",
+          };
           saveLLMConfig({
             provider: message.payload.provider,
             apiKey: message.payload.apiKey,
             model: message.payload.model,
-            baseUrl: undefined,
+            baseUrl: baseUrls[message.payload.provider],
           })
             .then(() => sendResponse({ success: true }))
             .catch((err) => sendResponse({ error: err.message }));
           return true;
+        }
 
         case "GET_LLM_CONFIG":
           loadLLMConfig()

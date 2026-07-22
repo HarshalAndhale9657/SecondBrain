@@ -1,111 +1,40 @@
 # Second Brain
 
-A privacy-first Chrome extension that indexes your browsing history locally and answers natural-language questions with citations — "you read this on example.com, three days ago."
+A private, local-only RAG system built directly into your Chrome browser. It indexes the web pages you visit, generating vector embeddings locally via WASM, and storing them in an in-browser PostgreSQL (PGlite + pgvector) database. You can then ask questions about what you've read, and it will answer with citations back to the original source.
 
-Everything runs on your machine. No data leaves the browser.
+## Installation (Load Unpacked)
 
-## Architecture
+1. Clone or download this repository.
+2. Run `npm install` and `npm run build`.
+3. Open Google Chrome and navigate to `chrome://extensions`.
+4. Enable **Developer mode** in the top right corner.
+5. Click **Load unpacked** and select the `.output/chrome-mv3` folder inside this repository.
+6. Open the Extension Side Panel, enter your API key in the settings, and start browsing!
 
-```
-Content Script → Service Worker → Offscreen Document → Side Panel
-  (capture)       (route + dedup)    (ML inference)      (UI)
-```
+## Features
 
-- **Capture**: Readability.js extracts article content; MutationObserver handles SPAs
-- **Dedup**: 64-bit SimHash with Hamming distance thresholds collapses re-visits
-- **Embed**: Transformers.js (all-MiniLM-L6-v2, 384-dim) runs in an Offscreen Document via WASM
-- **Store**: PGlite (PostgreSQL WASM) + pgvector with HNSW indexing, persisted in IndexedDB
-- **Retrieve**: Cosine similarity + temporal decay re-ranking + MMR diversification
-- **Generate**: Groq free tier (Llama 3.1 8B) with grounded system prompts
+- **Capture Pipeline**: Uses `Readability.js` to strip out navigation, ads, and boilerplate, indexing only the core article content.
+- **Deduplication Engine**: Uses an optimized 64-bit SimHash and Hamming Distance to flag near-duplicate pages (e.g. repeated visits or minor updates).
+- **Temporal Retrieval**: Results decay exponentially based on age, prioritizing recent reading when semantic similarity is equal. Time-scoped parsing supports natural language filters (e.g. "last week").
+- **Maximal Marginal Relevance (MMR)**: Diverse chunk retrieval prevents the LLM from over-indexing on a single page, fetching diverse sources.
+- **Negative Rejection**: The RAG pipeline respects when information is simply not there. If relevance thresholds aren't met, it confidently states: "Not in your history."
 
-## Install
+## Privacy Model & Threat Analysis
 
-```bash
-# Clone and install
-git clone https://github.com/YOUR_USERNAME/second-brain.git
-cd second-brain
-npm install
+This extension is built with **Privacy by Default**:
+1. **Local-Only Embeddings**: The embedding model (Transformers.js / `all-MiniLM-L6-v2`) runs directly inside an offscreen Chrome document via WebAssembly. **No text data is ever sent to a third-party embedding server.**
+2. **Local Vector Storage**: All captured text, vectors, and metadata are stored in `PGlite` over IndexedDB, completely siloed within the browser profile.
+3. **Strict Content Security Policy**: The extension manifest implements strict `connect-src` limits. Network calls are restricted exclusively to:
+   - Your chosen LLM API endpoint (`api.groq.com`, `generativelanguage.googleapis.com`, `localhost:11434`).
+   - Hugging Face CDNs for fetching the open-source embedding model weights on first load.
+4. **Blocklists**: Banking, health, email, and authentication URLs are hardcoded out of the capture pipeline. Users can add custom domain blocklists.
 
-# Build the extension
-npm run build
+## Evaluation Framework
 
-# Load in Chrome:
-# 1. Open chrome://extensions
-# 2. Enable "Developer mode"
-# 3. Click "Load unpacked"
-# 4. Select the .output/chrome-mv3 directory
-```
-
-## Configuration
-
-1. Click the extension icon to open the Side Panel
-2. Go to **Settings** tab
-3. Set your **Groq API key** (free at https://console.groq.com)
-4. (Optional) Adjust blocked domains
-
-## Usage
-
-- Browse the web normally — pages are captured and indexed automatically
-- Click the extension icon to open the Side Panel
-- **Ask tab**: Type natural-language questions about your browsing history
-- **Index tab**: Browse and manage indexed pages
-- **Settings tab**: Configure LLM, manage blocklist, trigger backfill, wipe data
-
-## Privacy Model
-
-- All text extraction, deduplication, and embedding happen locally in the browser
-- The only outbound requests are:
-  - One-time model download from Hugging Face CDN (~30MB)
-  - LLM API calls to Groq (query context only, no raw browsing data)
-- Default blocklist excludes banking, email, health, and authentication pages
-- Users can pause capture, block domains, delete entries, or wipe the entire index
-- `declarativeNetRequest` rules block all other outbound traffic from the extension
-
-## Running the Evaluation
-
-```bash
-# Ensure questions.json is populated with your real browsing data
-npm run eval
-# Results are written to eval/logs/
-```
-
-## Project Structure
-
-```
-second-brain/
-├── entrypoints/
-│   ├── background.ts          # Service Worker (event router)
-│   ├── content.ts             # Content Script (DOM capture)
-│   ├── offscreen.html/.ts     # Offscreen Document (ML inference)
-│   └── sidepanel/             # Side Panel UI (React)
-├── lib/
-│   ├── capture/               # Readability, SPA detection, URL cleaning
-│   ├── dedup/                 # SimHash implementation
-│   ├── embedding/             # Transformers.js pipeline, text chunker
-│   ├── generation/            # LLM client (Groq/Gemini/Ollama)
-│   ├── privacy/               # Blocklist, network rules
-│   ├── retrieval/             # Vector search, temporal decay, MMR
-│   ├── storage/               # PGlite + pgvector database layer
-│   └── messages.ts            # Type-safe message protocol
-├── eval/
-│   ├── questions.json         # 30 eval questions with ground truth
-│   └── logs/                  # Per-question retrieval + answer logs
-├── FINDINGS.md
-└── README.md
-```
-
-## Tech Stack
-
-| Component | Technology | Cost |
-|-----------|-----------|------|
-| Framework | WXT + Vite + TypeScript | $0 |
-| Content Extraction | @mozilla/readability | $0 |
-| Deduplication | Custom SimHash (FNV-1a, 64-bit) | $0 |
-| Embeddings | Transformers.js + all-MiniLM-L6-v2 | $0 |
-| Vector Store | PGlite + pgvector (IndexedDB) | $0 |
-| LLM | Groq free tier (Llama 3.1 8B) | $0 |
-| UI | React (Side Panel) | $0 |
-
-## AI Usage Disclosure
-
-AI tools were used extensively throughout the build process for code generation, architecture design, and debugging. The evaluation dataset (questions.json) and all findings are manually verified against real browsing data.
+To run the automated evaluation against your real browsing history:
+1. Populate `eval/questions.json` with 30 questions based on your own actual reading from the past 2 weeks (ensure it includes Direct, Multi-Hop, Time-Scoped, and Negative questions).
+2. Open the Second Brain **Settings Panel** in Chrome.
+3. Click the **"Open Eval Runner"** button under Evaluation Tools.
+4. Upload your `eval/questions.json` file.
+5. The runner will execute all queries against your real IndexedDB and automatically download the results as `eval-logs-output.json`.
+6. Analyze the output and populate `FINDINGS.md`.

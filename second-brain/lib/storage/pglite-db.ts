@@ -10,9 +10,10 @@
  */
 
 import { PGlite } from "@electric-sql/pglite";
-import { vector } from "@electric-sql/pglite/contrib/vector";
+import { vector } from "@electric-sql/pglite/vector";
 
-const DB_NAME = "idb://second-brain-db";
+const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
+const DB_NAME = isBrowser ? "idb://second-brain-db" : "memory://";
 const EMBEDDING_DIM = 384;
 
 /** Singleton database instance. */
