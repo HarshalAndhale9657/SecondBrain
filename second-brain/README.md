@@ -1,40 +1,52 @@
-# Second Brain
+# Second Brain — Local AI Browsing Assistant
 
-A private, local-only RAG system built directly into your Chrome browser. It indexes the web pages you visit, generating vector embeddings locally via WASM, and storing them in an in-browser PostgreSQL (PGlite + pgvector) database. You can then ask questions about what you've read, and it will answer with citations back to the original source.
-
-## Installation (Load Unpacked)
-
-1. Clone or download this repository.
-2. Run `npm install` and `npm run build`.
-3. Open Google Chrome and navigate to `chrome://extensions`.
-4. Enable **Developer mode** in the top right corner.
-5. Click **Load unpacked** and select the `.output/chrome-mv3` folder inside this repository.
-6. Open the Extension Side Panel, enter your API key in the settings, and start browsing!
+Second Brain is a privacy-first, fully local Retrieval-Augmented Generation (RAG) Chrome Extension. It passively indexes your browsing history using in-browser vector embeddings and a local WebAssembly Postgres database, allowing you to ask questions about anything you've read online — all without your browsing history ever leaving your device.
 
 ## Features
 
-- **Capture Pipeline**: Uses `Readability.js` to strip out navigation, ads, and boilerplate, indexing only the core article content.
-- **Deduplication Engine**: Uses an optimized 64-bit SimHash and Hamming Distance to flag near-duplicate pages (e.g. repeated visits or minor updates).
-- **Temporal Retrieval**: Results decay exponentially based on age, prioritizing recent reading when semantic similarity is equal. Time-scoped parsing supports natural language filters (e.g. "last week").
-- **Maximal Marginal Relevance (MMR)**: Diverse chunk retrieval prevents the LLM from over-indexing on a single page, fetching diverse sources.
-- **Negative Rejection**: The RAG pipeline respects when information is simply not there. If relevance thresholds aren't met, it confidently states: "Not in your history."
+- **100% Local Pipeline**: Embeddings are generated entirely in the browser using Transformers.js (`Supabase/gte-small`).
+- **WebAssembly PostgreSQL**: Uses PGLite with `pgvector` to run a fully functional vector database directly in the browser via IndexedDB.
+- **Privacy-First**: Your browsing data never leaves your device. Only the final synthesized LLM queries (which you explicitly ask) are sent to the LLM (Groq API by default).
+- **Temporal Search & Deduplication**: Employs exponential time decay for vector searches and SimHash (64-bit) for near-duplicate detection to avoid indexing the exact same page multiple times.
+- **Background Backfill**: Instantly indexes your recent browsing history upon installation using the Chrome History API and an offscreen document pipeline.
 
-## Privacy Model & Threat Analysis
+## Installation & Setup
 
-This extension is built with **Privacy by Default**:
-1. **Local-Only Embeddings**: The embedding model (Transformers.js / `all-MiniLM-L6-v2`) runs directly inside an offscreen Chrome document via WebAssembly. **No text data is ever sent to a third-party embedding server.**
-2. **Local Vector Storage**: All captured text, vectors, and metadata are stored in `PGlite` over IndexedDB, completely siloed within the browser profile.
-3. **Strict Content Security Policy**: The extension manifest implements strict `connect-src` limits. Network calls are restricted exclusively to:
-   - Your chosen LLM API endpoint (`api.groq.com`, `generativelanguage.googleapis.com`, `localhost:11434`).
-   - Hugging Face CDNs for fetching the open-source embedding model weights on first load.
-4. **Blocklists**: Banking, health, email, and authentication URLs are hardcoded out of the capture pipeline. Users can add custom domain blocklists.
+1. Clone or download this repository.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Build the extension:
+   ```bash
+   npm run build
+   ```
+4. Load into Chrome:
+   - Go to `chrome://extensions/`
+   - Enable "Developer mode" in the top right corner.
+   - Click "Load unpacked" and select the `.output/chrome-mv3` folder inside the project.
+5. Set your API Key:
+   - Click the extension icon to open the Second Brain Side Panel.
+   - Navigate to the **Settings** tab.
+   - Enter your Groq API Key (required for LLM generation).
 
-## Evaluation Framework
+## Usage
 
-To run the automated evaluation against your real browsing history:
-1. Populate `eval/questions.json` with 30 questions based on your own actual reading from the past 2 weeks (ensure it includes Direct, Multi-Hop, Time-Scoped, and Negative questions).
-2. Open the Second Brain **Settings Panel** in Chrome.
-3. Click the **"Open Eval Runner"** button under Evaluation Tools.
-4. Upload your `eval/questions.json` file.
-5. The runner will execute all queries against your real IndexedDB and automatically download the results as `eval-logs-output.json`.
-6. Analyze the output and populate `FINDINGS.md`.
+- **Capture**: Just browse! Pages are automatically captured, chunked, and embedded in the background as you read them.
+- **Ask**: Open the Side Panel and ask questions like "What was that article about ChatGPT writers?" or "What recipes did I look at yesterday?".
+- **Manage**: Go to the **Index** tab in the Side Panel to view, search, and manually delete indexed pages.
+- **Privacy Controls**: Use the Settings tab to pause capture or add domains to your blocklist (e.g., `bank.com`). By default, common sensitive domains are already blocked.
+
+## Running the Evaluation
+
+The extension includes a built-in evaluation runner to test the RAG pipeline against a custom dataset:
+
+1. Create a `questions.json` file structured similarly to the provided template in `eval/questions.json`.
+2. Open Chrome and navigate to: `chrome-extension://<YOUR_EXTENSION_ID>/eval-runner.html`
+3. Upload your `questions.json` file.
+4. The runner will silently execute the pipeline for each question against your actual browsing history database and prompt you to download a `eval-logs-output.json` file containing the retrieved chunks, answers, and metadata.
+
+## Security Model
+
+- **Content Security Policy (CSP)**: The extension uses a strict CSP. Outbound connections are locked down. 
+- **LLM Independence**: No browsing history is used to train the LLM. The local vector database acts as a hard boundary.

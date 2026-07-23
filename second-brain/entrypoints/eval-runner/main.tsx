@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
-import "@/assets/tailwind.css"; // assuming we have styles
+import "../sidepanel/styles.css";
 
 function EvalRunner() {
   const [file, setFile] = useState<File | null>(null);
