@@ -23,12 +23,19 @@ let initPromise: Promise<FeatureExtractionPipeline> | null = null;
  * Configure Transformers.js to load ONNX runtime binaries from the
  * extension's local assets instead of the remote CDN.
  *
- * This is required to comply with MV3's Content Security Policy which
- * blocks remote code execution.
+ * Also forces single-threaded WASM execution because Chrome extension
+ * CSP blocks `blob:` URLs, which ONNX Runtime uses to spawn Web Workers
+ * for multi-threaded mode. Without this, the error is:
+ *   "Failed to execute 'importScripts' on 'WorkerGlobalScope'"
  */
 function configureLocalPaths(): void {
   // Point to locally bundled ONNX runtime binaries
   env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL("ort/");
+
+  // CRITICAL: Force single-threaded mode.
+  // Multi-threaded WASM spawns a Web Worker via blob: URL which Chrome
+  // extension CSP blocks. This is the root cause of the importScripts error.
+  env.backends.onnx.wasm.numThreads = 1;
 
   // Allow local model caching
   env.allowLocalModels = false;

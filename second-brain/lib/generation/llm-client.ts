@@ -111,7 +111,9 @@ RULES (strict):
 5. For time-scoped questions ("last week", "yesterday"), prioritize chunks matching that time range.
 6. If chunks from multiple sources are relevant, synthesize them and cite all contributing sources.
 7. Never fabricate, guess, or extrapolate beyond what the context explicitly states.
-8. Only cite chunks you actually used. Do NOT cite all chunks.`;
+8. Only cite chunks you actually used. Do NOT cite all chunks.
+9. For meta-questions about the user's browsing (e.g., "what pages did I visit?", "what did I read last?", "which sites did I browse?"), use the [TITLE], [SOURCE], and [READ ON] metadata to answer. List the pages with their titles and URLs.
+10. If the user asks "what was my last page" or similar, identify the chunk with the most recent [READ ON] timestamp and report that page's title and URL.`;
 }
 
 /**

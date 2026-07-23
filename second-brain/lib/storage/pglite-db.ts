@@ -12,8 +12,13 @@
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 
-const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
-const DB_NAME = isBrowser ? "idb://second-brain-db" : "memory://";
+/**
+ * PGlite needs IndexedDB for persistence. Service Workers have indexedDB
+ * but NOT window.document, so the old `typeof window !== 'undefined'` check
+ * was incorrectly forcing memory-only mode in the background script.
+ */
+const hasIndexedDB = typeof indexedDB !== "undefined";
+const DB_NAME = hasIndexedDB ? "idb://second-brain-db" : "memory://";
 const EMBEDDING_DIM = 384;
 
 /** Singleton database instance. */
