@@ -5,8 +5,10 @@
  * Supports HNSW-indexed vector similarity search for sub-millisecond retrieval
  * even at scale.
  *
- * This module provides the complete data layer: schema management, document/chunk
- * CRUD, vector search, and dedup flag operations.
+ * IMPORTANT: PGlite's IDB persistence requires the instance to be properly
+ * closed to flush the Emscripten filesystem to IndexedDB. Since Chrome MV3
+ * kills service workers after ~30s idle WITHOUT firing any cleanup events,
+ * we must close+reopen after every write batch to guarantee persistence.
  */
 
 import { PGlite } from "@electric-sql/pglite";
@@ -14,8 +16,7 @@ import { vector } from "@electric-sql/pglite/vector";
 
 /**
  * PGlite needs IndexedDB for persistence. Service Workers have indexedDB
- * but NOT window.document, so the old `typeof window !== 'undefined'` check
- * was incorrectly forcing memory-only mode in the background script.
+ * but NOT window.document, so we check for indexedDB directly.
  */
 const hasIndexedDB = typeof indexedDB !== "undefined";
 const DB_NAME = hasIndexedDB ? "idb://second-brain-db" : "memory://";
@@ -29,9 +30,71 @@ let initPromise: Promise<PGlite> | null = null;
  * Initialize the PGlite database with pgvector extension.
  * Creates schema on first run; reuses existing data on subsequent loads.
  */
+async function initDatabase(): Promise<PGlite> {
+  const instance = new PGlite(DB_NAME, {
+    extensions: { vector },
+  });
+
+  await instance.waitReady;
+
+  // Enable pgvector extension
+  await instance.exec("CREATE EXTENSION IF NOT EXISTS vector;");
+
+  // Create schema
+  await instance.exec(`
+    CREATE TABLE IF NOT EXISTS documents (
+      doc_id BIGSERIAL PRIMARY KEY,
+      url TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT 'Untitled',
+      text_content TEXT NOT NULL,
+      excerpt TEXT,
+      byline TEXT,
+      simhash_hi INTEGER NOT NULL,
+      simhash_lo INTEGER NOT NULL,
+      captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_visited TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      is_backfill BOOLEAN NOT NULL DEFAULT FALSE
+    );
+
+    CREATE TABLE IF NOT EXISTS chunks (
+      chunk_id BIGSERIAL PRIMARY KEY,
+      doc_id BIGINT NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,
+      chunk_index INTEGER NOT NULL,
+      chunk_text TEXT NOT NULL,
+      embedding vector(${EMBEDDING_DIM}),
+      source_url TEXT NOT NULL,
+      document_title TEXT NOT NULL,
+      captured_at TIMESTAMPTZ NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS dedup_flags (
+      doc_id BIGINT PRIMARY KEY REFERENCES documents(doc_id) ON DELETE CASCADE,
+      collapse_with BIGINT REFERENCES documents(doc_id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_documents_url ON documents(url);
+    CREATE INDEX IF NOT EXISTS idx_documents_simhash ON documents(simhash_hi, simhash_lo);
+    CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);
+  `);
+
+  // Create HNSW index for vector search (idempotent)
+  try {
+    await instance.exec(`
+      CREATE INDEX IF NOT EXISTS idx_chunks_embedding
+        ON chunks USING hnsw (embedding vector_cosine_ops);
+    `);
+  } catch {
+    console.warn("[SecondBrain] HNSW index creation deferred.");
+  }
+
+  return instance;
+}
+
+/**
+ * Get a live database connection. Re-opens if closed.
+ */
 export async function getDatabase(): Promise<PGlite> {
   if (db) {
-    // Health check: verify the connection is still alive
     try {
       await db.query("SELECT 1");
       return db;
@@ -46,74 +109,36 @@ export async function getDatabase(): Promise<PGlite> {
 
   initPromise = (async () => {
     try {
-      const instance = new PGlite(DB_NAME, {
-        extensions: { vector },
-      });
-
-      await instance.waitReady;
-
-      // Enable pgvector extension
-      await instance.exec("CREATE EXTENSION IF NOT EXISTS vector;");
-
-      // Create schema
-      await instance.exec(`
-        CREATE TABLE IF NOT EXISTS documents (
-          doc_id BIGSERIAL PRIMARY KEY,
-          url TEXT NOT NULL,
-          title TEXT NOT NULL DEFAULT 'Untitled',
-          text_content TEXT NOT NULL,
-          excerpt TEXT,
-          byline TEXT,
-          simhash_hi INTEGER NOT NULL,
-          simhash_lo INTEGER NOT NULL,
-          captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          last_visited TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          is_backfill BOOLEAN NOT NULL DEFAULT FALSE
-        );
-
-        CREATE TABLE IF NOT EXISTS chunks (
-          chunk_id BIGSERIAL PRIMARY KEY,
-          doc_id BIGINT NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,
-          chunk_index INTEGER NOT NULL,
-          chunk_text TEXT NOT NULL,
-          embedding vector(${EMBEDDING_DIM}),
-          source_url TEXT NOT NULL,
-          document_title TEXT NOT NULL,
-          captured_at TIMESTAMPTZ NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS dedup_flags (
-          doc_id BIGINT PRIMARY KEY REFERENCES documents(doc_id) ON DELETE CASCADE,
-          collapse_with BIGINT REFERENCES documents(doc_id) ON DELETE SET NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_documents_url ON documents(url);
-        CREATE INDEX IF NOT EXISTS idx_documents_simhash ON documents(simhash_hi, simhash_lo);
-        CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);
-      `);
-
-      // Create HNSW index for vector search (idempotent)
-      try {
-        await instance.exec(`
-          CREATE INDEX IF NOT EXISTS idx_chunks_embedding
-            ON chunks USING hnsw (embedding vector_cosine_ops);
-        `);
-      } catch {
-        // HNSW index creation may fail if table is empty; will be created on first insert
-        console.warn("[SecondBrain] HNSW index creation deferred.");
-      }
-
+      const instance = await initDatabase();
       db = instance;
+      console.debug("[SecondBrain] PGlite initialized, DB_NAME:", DB_NAME);
       return instance;
     } catch (err) {
-      // Reset so next call retries from scratch
       db = null;
       initPromise = null;
+      console.error("[SecondBrain] PGlite init failed:", err);
       throw err;
     }
   })();
 
   return initPromise;
+}
+
+/**
+ * Close the database to flush all data to IndexedDB.
+ * Must be called after write operations to ensure persistence
+ * before Chrome kills the service worker.
+ */
+export async function flushDatabase(): Promise<void> {
+  if (db) {
+    try {
+      await db.close();
+    } catch {
+      // Already closed or errored
+    }
+    db = null;
+    initPromise = null;
+  }
 }
 
 // ─── Document Operations ─────────────────────────────────────────────────
@@ -351,6 +376,8 @@ export async function vectorSearch(
 export async function wipeDatabase(): Promise<void> {
   const database = await getDatabase();
   await database.exec(`
-    TRUNCATE TABLE dedup_flags, chunks, documents CASCADE;
+    DELETE FROM dedup_flags;
+    DELETE FROM chunks;
+    DELETE FROM documents;
   `);
 }

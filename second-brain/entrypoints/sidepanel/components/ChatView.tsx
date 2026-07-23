@@ -11,6 +11,36 @@ interface Message {
   isError?: boolean;
 }
 
+/**
+ * Clean the LLM's raw answer for display:
+ * 1. Strip the reference list block (e.g. "[1] Title — URL") since
+ *    citations are rendered separately in the UI.
+ * 2. Render **bold** markdown.
+ */
+function formatAnswer(raw: string): React.ReactNode {
+  // Strip trailing reference block (lines starting with [1], [2], etc.)
+  let cleaned = raw.replace(
+    /\n*(?:\[\d+\]\s+.+(?:\n|$))+$/,
+    ""
+  ).trim();
+
+  // Also strip standalone reference lines anywhere in the text
+  cleaned = cleaned.replace(/^\[\d+\]\s+\S.*$/gm, "").trim();
+
+  // Remove consecutive blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+
+  // Split into segments: bold markers and plain text
+  const parts = cleaned.split(/(\*\*[^*]+\*\*)/g);
+
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export function ChatView(): React.JSX.Element {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -145,7 +175,11 @@ export function ChatView(): React.JSX.Element {
                         : "message-assistant"
                 }`}
               >
-                <div>{msg.content}</div>
+                <div>
+                  {msg.role === "assistant" && !msg.isError
+                    ? formatAnswer(msg.content)
+                    : msg.content}
+                </div>
 
                 {msg.citations && msg.citations.length > 0 && (
                   <div className="citations">
