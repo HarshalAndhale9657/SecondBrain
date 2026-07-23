@@ -2,7 +2,7 @@
  * LLM Client — switchable client for Groq, Gemini, and Ollama.
  *
  * Handles answer generation from retrieved context chunks.
- * Supports streaming for responsive UI updates.
+ * Includes retry logic, request timeouts, and real citation parsing.
  */
 
 export type LLMProvider = "groq" | "gemini" | "ollama";
@@ -34,6 +34,9 @@ export interface GenerationResponse {
 }
 
 const STORAGE_KEY = "llm_config";
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_RETRIES = 2;
+const RETRY_BASE_DELAY_MS = 1_500;
 
 const DEFAULT_CONFIGS: Record<LLMProvider, Partial<LLMConfig>> = {
   groq: {
@@ -96,17 +99,19 @@ function buildSystemPrompt(): string {
 
 Each context chunk includes:
 - [SOURCE]: The URL where the content was read
+- [TITLE]: The title of the page
 - [READ ON]: The date/time the page was captured
 
 RULES (strict):
 1. Answer ONLY from the provided context chunks. Do not use your training knowledge.
 2. If the context does not contain sufficient information to answer the question, respond with exactly: "Not in your history."
-3. Be concise and direct. Cite your sources.
+3. Be concise and direct. Cite your sources using bracket notation like [1], [2].
 4. End your answer with numbered references in this format:
    [1] Title — URL
 5. For time-scoped questions ("last week", "yesterday"), prioritize chunks matching that time range.
 6. If chunks from multiple sources are relevant, synthesize them and cite all contributing sources.
-7. Never fabricate, guess, or extrapolate beyond what the context explicitly states.`;
+7. Never fabricate, guess, or extrapolate beyond what the context explicitly states.
+8. Only cite chunks you actually used. Do NOT cite all chunks.`;
 }
 
 /**
@@ -129,31 +134,134 @@ ${chunk.text}`
 }
 
 /**
+ * Parse citation references like [1], [2] from the LLM's raw output
+ * and return only the context chunks that were actually cited.
+ */
+function extractCitedReferences(
+  rawAnswer: string,
+  contextChunks: GenerationRequest["contextChunks"]
+): Array<{ index: number; url: string; title: string }> {
+  const citedIndices = new Set<number>();
+  const citationPattern = /\[(\d+)\]/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = citationPattern.exec(rawAnswer)) !== null) {
+    const idx = parseInt(match[1], 10);
+    if (idx >= 1 && idx <= contextChunks.length) {
+      citedIndices.add(idx);
+    }
+  }
+
+  // If the LLM cited nothing explicitly, fall back to all chunks
+  // (graceful degradation for models that don't follow citation format)
+  if (citedIndices.size === 0) {
+    return contextChunks.map((chunk, i) => ({
+      index: i + 1,
+      url: chunk.sourceUrl,
+      title: chunk.documentTitle,
+    }));
+  }
+
+  return Array.from(citedIndices)
+    .sort((a, b) => a - b)
+    .map((idx) => ({
+      index: idx,
+      url: contextChunks[idx - 1].sourceUrl,
+      title: contextChunks[idx - 1].documentTitle,
+    }));
+}
+
+/**
+ * Fetch with a timeout. Throws if the request takes longer than `timeoutMs`.
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = REQUEST_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`LLM request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Retry a function with exponential backoff.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = MAX_RETRIES,
+  baseDelay: number = RETRY_BASE_DELAY_MS
+): Promise<T> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      // Don't retry on auth errors or bad requests
+      if (lastError.message.includes("401") || lastError.message.includes("400")) {
+        throw lastError;
+      }
+
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.warn(
+          `[SecondBrain] LLM request failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms:`,
+          lastError.message
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+
+  throw lastError!;
+}
+
+/**
  * Generate an answer using the Groq API (OpenAI-compatible endpoint).
  */
 async function generateGroq(
   config: LLMConfig,
   request: GenerationRequest
 ): Promise<string> {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: "system", content: buildSystemPrompt() },
-        {
-          role: "user",
-          content: `Context from my browsing history:\n\n${formatContext(request.contextChunks)}\n\n---\n\nQuestion: ${request.query}`,
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 1024,
-    }),
-  });
+  const response = await fetchWithTimeout(
+    `${config.baseUrl}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: "system", content: buildSystemPrompt() },
+          {
+            role: "user",
+            content: `Context from my browsing history:\n\n${formatContext(request.contextChunks)}\n\n---\n\nQuestion: ${request.query}`,
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 1024,
+      }),
+    }
+  );
 
   if (!response.ok) {
     const error = await response.text();
@@ -173,7 +281,7 @@ async function generateGemini(
 ): Promise<string> {
   const url = `${config.baseUrl}/models/${config.model}:generateContent?key=${config.apiKey}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -212,24 +320,28 @@ async function generateOllama(
   config: LLMConfig,
   request: GenerationRequest
 ): Promise<string> {
-  const response = await fetch(`${config.baseUrl}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: "system", content: buildSystemPrompt() },
-        {
-          role: "user",
-          content: `Context from my browsing history:\n\n${formatContext(request.contextChunks)}\n\n---\n\nQuestion: ${request.query}`,
+  const response = await fetchWithTimeout(
+    `${config.baseUrl}/api/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: "system", content: buildSystemPrompt() },
+          {
+            role: "user",
+            content: `Context from my browsing history:\n\n${formatContext(request.contextChunks)}\n\n---\n\nQuestion: ${request.query}`,
+          },
+        ],
+        stream: false,
+        options: {
+          temperature: 0.1,
         },
-      ],
-      stream: false,
-      options: {
-        temperature: 0.1,
-      },
-    }),
-  });
+      }),
+    },
+    60_000 // Ollama is local, give it more time
+  );
 
   if (!response.ok) {
     const error = await response.text();
@@ -243,6 +355,7 @@ async function generateOllama(
 /**
  * Generate an answer from retrieved context using the configured LLM.
  * Routes to the appropriate provider based on stored configuration.
+ * Includes retry logic for transient failures.
  */
 export async function generateAnswer(
   request: GenerationRequest
@@ -255,28 +368,21 @@ export async function generateAnswer(
     );
   }
 
-  let rawAnswer: string;
+  const rawAnswer = await withRetry(async () => {
+    switch (config.provider) {
+      case "groq":
+        return generateGroq(config, request);
+      case "gemini":
+        return generateGemini(config, request);
+      case "ollama":
+        return generateOllama(config, request);
+      default:
+        throw new Error(`Unknown LLM provider: ${config.provider}`);
+    }
+  });
 
-  switch (config.provider) {
-    case "groq":
-      rawAnswer = await generateGroq(config, request);
-      break;
-    case "gemini":
-      rawAnswer = await generateGemini(config, request);
-      break;
-    case "ollama":
-      rawAnswer = await generateOllama(config, request);
-      break;
-    default:
-      throw new Error(`Unknown LLM provider: ${config.provider}`);
-  }
-
-  // Extract citations from the answer
-  const citations = request.contextChunks.map((chunk, i) => ({
-    index: i + 1,
-    url: chunk.sourceUrl,
-    title: chunk.documentTitle,
-  }));
+  // Extract only the citations the LLM actually referenced
+  const citations = extractCitedReferences(rawAnswer, request.contextChunks);
 
   return {
     answer: rawAnswer,

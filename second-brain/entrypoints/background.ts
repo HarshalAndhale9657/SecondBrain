@@ -43,13 +43,22 @@ import { cleanUrl } from "@/lib/capture/url-cleaner";
 import type { ExtensionMessage } from "@/lib/messages";
 
 export default defineBackground(() => {
+  // ─── Constants ────────────────────────────────────────────────────────
+
+  const EMBEDDING_TIMEOUT_MS = 90_000;
+  const EMBEDDING_MAX_RETRIES = 2;
+  const EMBEDDING_RETRY_DELAY_MS = 3_000;
+
   // ─── Offscreen Document Management ─────────────────────────────────
 
   let offscreenReady = false;
 
+  /**
+   * Ensure the Offscreen Document is alive.
+   * Clears stale flag and re-creates if Chrome destroyed it.
+   */
   async function ensureOffscreenDocument(): Promise<void> {
-    if (offscreenReady) return;
-
+    // Always verify via Chrome API — never trust the in-memory flag alone
     const existingContexts = await chrome.runtime.getContexts({
       contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
     });
@@ -59,34 +68,57 @@ export default defineBackground(() => {
       return;
     }
 
-    await chrome.offscreen.createDocument({
-      url: "offscreen.html",
-      reasons: [chrome.offscreen.Reason.WORKERS],
-      justification: "Run Transformers.js embedding model via WASM",
-    });
+    // Flag was stale — Chrome killed the document. Reset and recreate.
+    offscreenReady = false;
 
-    offscreenReady = true;
+    try {
+      await chrome.offscreen.createDocument({
+        url: "offscreen.html",
+        reasons: [chrome.offscreen.Reason.WORKERS],
+        justification: "Run Transformers.js embedding model via WASM",
+      });
+      offscreenReady = true;
+    } catch (err: unknown) {
+      // If another call already created it (race condition), that's fine
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes("Only a single offscreen")) {
+        throw err;
+      }
+      offscreenReady = true;
+    }
   }
 
   /**
    * Send texts to the Offscreen Document for embedding and wait for results.
+   * Includes timeout and retry logic for robustness.
    */
-  async function requestEmbeddings(texts: string[]): Promise<number[][]> {
+  async function requestEmbeddings(
+    texts: string[],
+    retryCount: number = 0
+  ): Promise<number[][]> {
     await ensureOffscreenDocument();
 
     const requestId = crypto.randomUUID();
 
-    return new Promise((resolve, reject) => {
+    return new Promise<number[][]>((resolve, reject) => {
+      let settled = false;
+      let timeoutHandle: ReturnType<typeof setTimeout>;
+
       const handler = (message: ExtensionMessage) => {
         if (
           message.type === "EMBED_RESPONSE" &&
-          message.payload.requestId === requestId
+          (message as any).payload.requestId === requestId
         ) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutHandle);
           chrome.runtime.onMessage.removeListener(handler);
-          if (message.payload.error) {
-            reject(new Error(message.payload.error));
+
+          const payload = (message as any).payload;
+          if (payload.error) {
+            reject(new Error(payload.error));
           } else {
-            resolve(message.payload.embeddings);
+            resolve(payload.embeddings);
           }
         }
       };
@@ -98,11 +130,28 @@ export default defineBackground(() => {
         payload: { requestId, texts },
       });
 
-      // Timeout after 60 seconds
-      setTimeout(() => {
+      timeoutHandle = setTimeout(() => {
+        if (settled) return;
+        settled = true;
         chrome.runtime.onMessage.removeListener(handler);
-        reject(new Error("Embedding request timed out"));
-      }, 60000);
+
+        // Retry with backoff
+        if (retryCount < EMBEDDING_MAX_RETRIES) {
+          const delay = EMBEDDING_RETRY_DELAY_MS * Math.pow(2, retryCount);
+          console.warn(
+            `[SecondBrain] Embedding timeout, retrying in ${delay}ms (attempt ${retryCount + 1}/${EMBEDDING_MAX_RETRIES})`
+          );
+          // Reset offscreen flag so it gets re-checked on retry
+          offscreenReady = false;
+          setTimeout(() => {
+            requestEmbeddings(texts, retryCount + 1)
+              .then(resolve)
+              .catch(reject);
+          }, delay);
+        } else {
+          reject(new Error("Embedding request timed out after retries"));
+        }
+      }, EMBEDDING_TIMEOUT_MS);
     });
   }
 
@@ -219,6 +268,22 @@ export default defineBackground(() => {
     requestId: string
   ): Promise<void> {
     try {
+      // Guard: check if database has any content before doing expensive work
+      const stats = await getIndexStats();
+      if (stats.chunkCount === 0) {
+        chrome.runtime.sendMessage({
+          type: "QUERY_RESPONSE",
+          payload: {
+            requestId,
+            answer: "Your index is empty. Browse some pages first so I have something to search.",
+            citations: [],
+            retrievedChunks: [],
+            isNegative: true,
+          },
+        });
+        return;
+      }
+
       // Parse time scope from query
       const timeScope = parseTimeScope(query);
 
@@ -404,23 +469,23 @@ export default defineBackground(() => {
 
         case "RUN_EVAL_QUERY": {
           const reqId = crypto.randomUUID();
-          
-          // Helper to intercept the response from handleQuery without broadcasting
-          // We temporarily listen to messages from our own extension
-          return new Promise((resolve) => {
-             const listener = (msg: any) => {
-                if (msg.type === "QUERY_RESPONSE" && msg.payload.requestId === reqId) {
-                   chrome.runtime.onMessage.removeListener(listener);
-                   resolve(msg.payload);
-                }
-             };
-             chrome.runtime.onMessage.addListener(listener);
-             
-             handleQuery(message.payload.query, reqId).catch(err => {
-                 chrome.runtime.onMessage.removeListener(listener);
-                 resolve({ error: err.message });
-             });
-          }).then(sendResponse);
+
+          // Set up a listener to intercept the QUERY_RESPONSE for this reqId
+          const listener = (msg: any) => {
+            if (msg.type === "QUERY_RESPONSE" && msg.payload.requestId === reqId) {
+              chrome.runtime.onMessage.removeListener(listener);
+              sendResponse(msg.payload);
+            }
+          };
+          chrome.runtime.onMessage.addListener(listener);
+
+          handleQuery(message.payload.query, reqId).catch((err) => {
+            chrome.runtime.onMessage.removeListener(listener);
+            sendResponse({ error: err.message });
+          });
+
+          // Must return true to keep sendResponse channel open
+          return true;
         }
 
         case "QUERY":

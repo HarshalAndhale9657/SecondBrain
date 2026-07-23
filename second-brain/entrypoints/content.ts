@@ -26,8 +26,11 @@ export default defineContentScript({
     /**
      * Attempt to capture the current page's content and send it
      * to the Service Worker for indexing.
+     *
+     * Checks pause state locally via chrome.storage.local before
+     * doing expensive DOM extraction to save CPU/memory.
      */
-    function capturePage(): void {
+    async function capturePage(): Promise<void> {
       const currentUrl = cleanUrl(location.href);
 
       // Skip if we already captured this URL in this tab session
@@ -35,6 +38,15 @@ export default defineContentScript({
 
       // Skip non-http pages (chrome://, about:, etc.)
       if (!location.protocol.startsWith("http")) return;
+
+      // Early pause check — avoids cloning the DOM when capture is paused
+      try {
+        const result = await chrome.storage.local.get("blocklist_config");
+        const config = result["blocklist_config"];
+        if (config?.isPaused) return;
+      } catch {
+        // If storage is unavailable, proceed with capture
+      }
 
       const content = extractContent(document);
       if (!content) return;

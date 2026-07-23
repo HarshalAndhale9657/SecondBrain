@@ -191,8 +191,12 @@ export function applyMMR(
 /**
  * Minimum cosine similarity threshold for considering a result relevant.
  * If no result exceeds this threshold, the system returns "Not in your history."
+ *
+ * Set conservatively low (0.25) to avoid false negatives on small indices
+ * where the embedding space is sparse. The LLM's grounding rules provide
+ * the second safety net against hallucination.
  */
-const RELEVANCE_THRESHOLD = 0.35;
+const RELEVANCE_THRESHOLD = 0.25;
 
 /**
  * Determine if the search results indicate the query topic is absent

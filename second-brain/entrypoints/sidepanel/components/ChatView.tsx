@@ -76,6 +76,23 @@ export function ChatView(): React.JSX.Element {
       type: "QUERY",
       payload: { requestId, query },
     });
+
+    // Client-side timeout (45s) — if no response arrives, show error
+    setTimeout(() => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === requestId && msg.isLoading
+            ? {
+                ...msg,
+                content: "Request timed out. The LLM or embedding service may be unavailable. Check your API key in Settings.",
+                isLoading: false,
+                isError: true,
+              }
+            : msg
+        )
+      );
+      setIsQuerying(false);
+    }, 45_000);
   }, [input, isQuerying]);
 
   const handleKeyDown = useCallback(

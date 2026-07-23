@@ -12,7 +12,13 @@ import { embedBatch } from "@/lib/embedding/pipeline";
 import type { EmbedTextMessage, EmbedResponseMessage } from "@/lib/messages";
 
 chrome.runtime.onMessage.addListener(
-  (message: EmbedTextMessage, _sender, _sendResponse) => {
+  (message: EmbedTextMessage, _sender, sendResponse) => {
+    // Health-check handler — background can verify we're alive
+    if ((message as any).type === "PING") {
+      sendResponse({ pong: true });
+      return true;
+    }
+
     if (message.type !== "EMBED_TEXT") return;
 
     const { requestId, texts } = message.payload;

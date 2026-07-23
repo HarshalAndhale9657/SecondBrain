@@ -25,69 +25,87 @@ let initPromise: Promise<PGlite> | null = null;
  * Creates schema on first run; reuses existing data on subsequent loads.
  */
 export async function getDatabase(): Promise<PGlite> {
-  if (db) return db;
+  if (db) {
+    // Health check: verify the connection is still alive
+    try {
+      await db.query("SELECT 1");
+      return db;
+    } catch {
+      console.warn("[SecondBrain] DB connection stale, reinitializing...");
+      db = null;
+      initPromise = null;
+    }
+  }
+
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    const instance = new PGlite(DB_NAME, {
-      extensions: { vector },
-    });
-
-    await instance.waitReady;
-
-    // Enable pgvector extension
-    await instance.exec("CREATE EXTENSION IF NOT EXISTS vector;");
-
-    // Create schema
-    await instance.exec(`
-      CREATE TABLE IF NOT EXISTS documents (
-        doc_id BIGSERIAL PRIMARY KEY,
-        url TEXT NOT NULL,
-        title TEXT NOT NULL DEFAULT 'Untitled',
-        text_content TEXT NOT NULL,
-        excerpt TEXT,
-        byline TEXT,
-        simhash_hi INTEGER NOT NULL,
-        simhash_lo INTEGER NOT NULL,
-        captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        last_visited TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        is_backfill BOOLEAN NOT NULL DEFAULT FALSE
-      );
-
-      CREATE TABLE IF NOT EXISTS chunks (
-        chunk_id BIGSERIAL PRIMARY KEY,
-        doc_id BIGINT NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,
-        chunk_index INTEGER NOT NULL,
-        chunk_text TEXT NOT NULL,
-        embedding vector(${EMBEDDING_DIM}),
-        source_url TEXT NOT NULL,
-        document_title TEXT NOT NULL,
-        captured_at TIMESTAMPTZ NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS dedup_flags (
-        doc_id BIGINT PRIMARY KEY REFERENCES documents(doc_id) ON DELETE CASCADE,
-        collapse_with BIGINT REFERENCES documents(doc_id) ON DELETE SET NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_documents_url ON documents(url);
-      CREATE INDEX IF NOT EXISTS idx_documents_simhash ON documents(simhash_hi, simhash_lo);
-      CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);
-    `);
-
-    // Create HNSW index for vector search (idempotent)
     try {
-      await instance.exec(`
-        CREATE INDEX IF NOT EXISTS idx_chunks_embedding
-          ON chunks USING hnsw (embedding vector_cosine_ops);
-      `);
-    } catch {
-      // HNSW index creation may fail if table is empty; will be created on first insert
-      console.warn("HNSW index creation deferred — table may be empty.");
-    }
+      const instance = new PGlite(DB_NAME, {
+        extensions: { vector },
+      });
 
-    db = instance;
-    return instance;
+      await instance.waitReady;
+
+      // Enable pgvector extension
+      await instance.exec("CREATE EXTENSION IF NOT EXISTS vector;");
+
+      // Create schema
+      await instance.exec(`
+        CREATE TABLE IF NOT EXISTS documents (
+          doc_id BIGSERIAL PRIMARY KEY,
+          url TEXT NOT NULL,
+          title TEXT NOT NULL DEFAULT 'Untitled',
+          text_content TEXT NOT NULL,
+          excerpt TEXT,
+          byline TEXT,
+          simhash_hi INTEGER NOT NULL,
+          simhash_lo INTEGER NOT NULL,
+          captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_visited TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          is_backfill BOOLEAN NOT NULL DEFAULT FALSE
+        );
+
+        CREATE TABLE IF NOT EXISTS chunks (
+          chunk_id BIGSERIAL PRIMARY KEY,
+          doc_id BIGINT NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,
+          chunk_index INTEGER NOT NULL,
+          chunk_text TEXT NOT NULL,
+          embedding vector(${EMBEDDING_DIM}),
+          source_url TEXT NOT NULL,
+          document_title TEXT NOT NULL,
+          captured_at TIMESTAMPTZ NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS dedup_flags (
+          doc_id BIGINT PRIMARY KEY REFERENCES documents(doc_id) ON DELETE CASCADE,
+          collapse_with BIGINT REFERENCES documents(doc_id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_documents_url ON documents(url);
+        CREATE INDEX IF NOT EXISTS idx_documents_simhash ON documents(simhash_hi, simhash_lo);
+        CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);
+      `);
+
+      // Create HNSW index for vector search (idempotent)
+      try {
+        await instance.exec(`
+          CREATE INDEX IF NOT EXISTS idx_chunks_embedding
+            ON chunks USING hnsw (embedding vector_cosine_ops);
+        `);
+      } catch {
+        // HNSW index creation may fail if table is empty; will be created on first insert
+        console.warn("[SecondBrain] HNSW index creation deferred.");
+      }
+
+      db = instance;
+      return instance;
+    } catch (err) {
+      // Reset so next call retries from scratch
+      db = null;
+      initPromise = null;
+      throw err;
+    }
   })();
 
   return initPromise;
@@ -328,8 +346,6 @@ export async function vectorSearch(
 export async function wipeDatabase(): Promise<void> {
   const database = await getDatabase();
   await database.exec(`
-    DELETE FROM dedup_flags;
-    DELETE FROM chunks;
-    DELETE FROM documents;
+    TRUNCATE TABLE dedup_flags, chunks, documents CASCADE;
   `);
 }

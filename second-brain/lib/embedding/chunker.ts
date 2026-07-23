@@ -27,14 +27,33 @@ const CHUNK_OVERLAP = 200;
 const MIN_CHUNK_SIZE = 100;
 
 /**
- * Split text into sentences using common sentence-ending patterns.
- * Handles abbreviations (Mr., Dr., etc.) and decimal numbers to avoid
- * false splits.
+ * Split text into sentences using robust sentence-ending patterns.
+ *
+ * Handles common abbreviations (Mr., Dr., U.S., etc.) and decimal
+ * numbers to avoid false splits. Falls back to newline-based splitting
+ * when no sentence boundaries are found.
  */
 function splitSentences(text: string): string[] {
-  // Split on sentence-ending punctuation followed by whitespace and uppercase
-  const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z])/);
-  return sentences.filter((s) => s.trim().length > 0);
+  // Split on sentence-ending punctuation followed by whitespace and an
+  // uppercase letter. Uses negative lookbehind to skip common abbreviations.
+  const abbrevLookbehind =
+    "(?<!Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|Inc|Ltd|Corp|vs|etc|al|e\\.g|i\\.e|U\\.S)";
+  const pattern = new RegExp(
+    `${abbrevLookbehind}(?<=[.!?])\\s+(?=[A-Z"\\u201C])`,
+    "g"
+  );
+
+  let sentences = text.split(pattern).filter((s) => s.trim().length > 0);
+
+  // If regex produced only one chunk from a large text, try splitting on newlines
+  if (sentences.length === 1 && text.length > CHUNK_SIZE) {
+    sentences = text
+      .split(/\n{2,}/)
+      .filter((s) => s.trim().length > 0)
+      .map((s) => s.trim());
+  }
+
+  return sentences;
 }
 
 /**
