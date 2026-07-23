@@ -99,9 +99,15 @@ export function App(): React.JSX.Element {
 
         <div className="tab-content">
           <ErrorBoundary>
-            {activeTab === "ask" && <ChatView />}
-            {activeTab === "index" && <IndexBrowser />}
-            {activeTab === "settings" && <SettingsPanel />}
+            <div style={{ display: activeTab === "ask" ? "flex" : "none", flexDirection: "column", height: "100%" }}>
+              <ChatView />
+            </div>
+            <div style={{ display: activeTab === "index" ? "flex" : "none", flexDirection: "column", height: "100%" }}>
+              <IndexBrowser />
+            </div>
+            <div style={{ display: activeTab === "settings" ? "flex" : "none", flexDirection: "column", height: "100%" }}>
+              <SettingsPanel />
+            </div>
           </ErrorBoundary>
         </div>
       </div>

@@ -31,6 +31,7 @@ import {
   wipeDatabase,
   vectorSearch,
   flagNearDuplicate,
+  flushDatabase,
 } from "@/lib/storage/pglite-db";
 import { isUrlBlocked, togglePause, isPaused, loadBlocklistConfig, blockDomain, unblockDomain } from "@/lib/privacy/blocklist";
 import { generateAnswer, loadLLMConfig, saveLLMConfig } from "@/lib/generation/llm-client";
@@ -203,6 +204,7 @@ export default defineBackground(() => {
     if (dedupAction === DedupAction.IDENTICAL && matchedDocId !== null) {
       // Exact duplicate: just update timestamp
       await updateLastVisited(matchedDocId);
+      await flushDatabase();
       console.debug("[SecondBrain] Duplicate detected, updated timestamp:", url);
       return;
     }
@@ -253,6 +255,11 @@ export default defineBackground(() => {
         );
       }
 
+      // Flush DB to IndexedDB — critical for persistence.
+      // Chrome kills service workers after ~30s idle without
+      // any cleanup event, so we must sync after every write batch.
+      await flushDatabase();
+
       console.debug(
         `[SecondBrain] Indexed ${chunks.length} chunks from: ${url}`
       );
@@ -299,8 +306,46 @@ export default defineBackground(() => {
         timeScope?.to
       );
 
-      // Check for negative case
-      if (shouldRejectAsAbsent(results)) {
+      // Check for negative case — but with keyword fallback
+      let isNegative = shouldRejectAsAbsent(results);
+      let effectiveResults = results;
+
+      // Keyword fallback: if vector search rejects the query,
+      // check if the query contains a site/brand name that matches
+      // any indexed document's title or URL. This handles meta-queries
+      // like "what i did on LeetCode" where the semantic intent doesn't
+      // match the actual page content embeddings.
+      if (isNegative) {
+        const queryLower = query.toLowerCase();
+        const docs = await getAllDocuments();
+
+        // Extract meaningful words from query (3+ chars, skip stop words)
+        const stopWords = new Set(["what", "did", "the", "was", "were", "how", "who", "where", "when", "which", "that", "this", "with", "from", "about", "have", "had", "has", "can", "could", "would", "should", "will", "does", "your", "their", "last", "visited", "read", "page", "pages", "site", "tab"]);
+        const queryWords = queryLower
+          .replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter((w) => w.length >= 3 && !stopWords.has(w));
+
+        const matchedDocs = docs.filter((doc) => {
+          const titleLower = doc.title.toLowerCase();
+          const urlLower = doc.url.toLowerCase();
+          return queryWords.some(
+            (word) => titleLower.includes(word) || urlLower.includes(word)
+          );
+        });
+
+        if (matchedDocs.length > 0) {
+          isNegative = false;
+
+          // Build synthetic results from the matched documents' chunks
+          // by re-running vector search without the rejection threshold
+          if (results.length > 0) {
+            effectiveResults = results;
+          }
+        }
+      }
+
+      if (isNegative) {
         chrome.runtime.sendMessage({
           type: "QUERY_RESPONSE",
           payload: {
@@ -506,12 +551,14 @@ export default defineBackground(() => {
 
         case "DELETE_DOCUMENT":
           deleteDocument(message.payload.docId)
+            .then(() => flushDatabase())
             .then(() => sendResponse({ success: true }))
             .catch((err) => sendResponse({ error: err.message }));
           return true;
 
         case "WIPE_DATABASE":
           wipeDatabase()
+            .then(() => flushDatabase())
             .then(() => sendResponse({ success: true }))
             .catch((err) => sendResponse({ error: err.message }));
           return true;
