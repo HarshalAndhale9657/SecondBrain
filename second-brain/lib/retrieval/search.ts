@@ -196,7 +196,7 @@ export function applyMMR(
  * where the embedding space is sparse. The LLM's grounding rules provide
  * the second safety net against hallucination.
  */
-const RELEVANCE_THRESHOLD = 0.25;
+const RELEVANCE_THRESHOLD = 0.18;
 
 /**
  * Determine if the search results indicate the query topic is absent

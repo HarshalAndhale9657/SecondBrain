@@ -45,6 +45,10 @@ export interface QueryMessage {
   payload: {
     requestId: string;
     query: string;
+    conversationHistory?: Array<{
+      role: "user" | "assistant";
+      content: string;
+    }>;
   };
 }
 

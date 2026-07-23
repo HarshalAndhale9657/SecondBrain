@@ -270,9 +270,22 @@ export default defineBackground(() => {
 
   // ─── Query Pipeline ────────────────────────────────────────────────
 
+  /** Common greetings that should get a friendly response, not a search. */
+  const GREETINGS = new Set([
+    "hey", "hi", "hello", "hola", "yo", "sup", "hii",
+    "good morning", "good evening", "good afternoon",
+    "what's up", "whats up", "howdy",
+  ]);
+
+  function isGreeting(query: string): boolean {
+    const cleaned = query.toLowerCase().replace(/[^a-z\s]/g, "").trim();
+    return GREETINGS.has(cleaned) || cleaned.length <= 3;
+  }
+
   async function handleQuery(
     query: string,
-    requestId: string
+    requestId: string,
+    conversationHistory?: Array<{ role: string; content: string }>
   ): Promise<void> {
     try {
       // Guard: check if database has any content before doing expensive work
@@ -291,11 +304,36 @@ export default defineBackground(() => {
         return;
       }
 
-      // Parse time scope from query
-      const timeScope = parseTimeScope(query);
+      // Handle greetings — respond friendly, don't search
+      if (isGreeting(query)) {
+        chrome.runtime.sendMessage({
+          type: "QUERY_RESPONSE",
+          payload: {
+            requestId,
+            answer: `Hey! 👋 I'm your browsing assistant. I have **${stats.documentCount} pages** indexed. Ask me anything about what you've read!`,
+            citations: [],
+            retrievedChunks: [],
+            isNegative: false,
+          },
+        });
+        return;
+      }
 
-      // Embed the query
-      const queryEmbeddings = await requestEmbeddings([query]);
+      // For follow-up queries, expand short queries using conversation context
+      let effectiveQuery = query;
+      if (conversationHistory && conversationHistory.length > 0 && query.split(/\s+/).length <= 5) {
+        // Short query with history — likely a follow-up
+        const lastUserMsg = [...conversationHistory].reverse().find((m) => m.role === "user");
+        if (lastUserMsg) {
+          effectiveQuery = `${lastUserMsg.content} — ${query}`;
+        }
+      }
+
+      // Parse time scope from query
+      const timeScope = parseTimeScope(effectiveQuery);
+
+      // Embed the effective query (expanded for follow-ups)
+      const queryEmbeddings = await requestEmbeddings([effectiveQuery]);
       const queryEmbedding = new Float32Array(queryEmbeddings[0]);
 
       // Vector search with optional date filtering

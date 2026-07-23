@@ -102,9 +102,22 @@ export function ChatView(): React.JSX.Element {
     setInput("");
     setIsQuerying(true);
 
+    // Build conversation history from completed messages (last 6 = 3 turns)
+    const completedMessages = messages
+      .filter((m) => !m.isLoading && !m.isError && m.content)
+      .slice(-6)
+      .map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
     chrome.runtime.sendMessage({
       type: "QUERY",
-      payload: { requestId, query },
+      payload: {
+        requestId,
+        query,
+        conversationHistory: completedMessages,
+      },
     });
 
     // Client-side timeout (45s) — if no response arrives, show error
@@ -123,7 +136,7 @@ export function ChatView(): React.JSX.Element {
       );
       setIsQuerying(false);
     }, 45_000);
-  }, [input, isQuerying]);
+  }, [input, isQuerying, messages]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

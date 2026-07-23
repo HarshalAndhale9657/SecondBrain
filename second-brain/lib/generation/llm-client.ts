@@ -22,6 +22,10 @@ export interface GenerationRequest {
     documentTitle: string;
     capturedAt: string;
   }>;
+  conversationHistory?: Array<{
+    role: string;
+    content: string;
+  }>;
 }
 
 export interface GenerationResponse {
@@ -159,13 +163,20 @@ function extractCitedReferences(
     }));
   }
 
-  return Array.from(citedIndices)
+  const citations = Array.from(citedIndices)
     .sort((a, b) => a - b)
     .map((idx) => ({
       index: idx,
       url: contextChunks[idx - 1].sourceUrl,
       title: contextChunks[idx - 1].documentTitle,
     }));
+
+  const seenUrls = new Set<string>();
+  return citations.filter(c => {
+    if (seenUrls.has(c.url)) return false;
+    seenUrls.add(c.url);
+    return true;
+  });
 }
 
 /**
@@ -249,6 +260,7 @@ async function generateGroq(
         model: config.model,
         messages: [
           { role: "system", content: buildSystemPrompt() },
+          ...(request.conversationHistory || []),
           {
             role: "user",
             content: `Context from my browsing history:\n\n${formatContext(request.contextChunks)}\n\n---\n\nQuestion: ${request.query}`,
@@ -286,7 +298,12 @@ async function generateGemini(
         parts: [{ text: buildSystemPrompt() }],
       },
       contents: [
+        ...(request.conversationHistory || []).map(msg => ({
+          role: msg.role === "assistant" ? "model" : "user",
+          parts: [{ text: msg.content }]
+        })),
         {
+          role: "user",
           parts: [
             {
               text: `Context from my browsing history:\n\n${formatContext(request.contextChunks)}\n\n---\n\nQuestion: ${request.query}`,
@@ -326,6 +343,7 @@ async function generateOllama(
         model: config.model,
         messages: [
           { role: "system", content: buildSystemPrompt() },
+          ...(request.conversationHistory || []),
           {
             role: "user",
             content: `Context from my browsing history:\n\n${formatContext(request.contextChunks)}\n\n---\n\nQuestion: ${request.query}`,
